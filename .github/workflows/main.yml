@@ -1,0 +1,27 @@
+name: Weekly Dropbox Job
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'   # every Sunday 00:00 UTC
+  workflow_dispatch:        # allows you to run manually too
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install dropbox
+
+      - name: Run Dropbox Script
+        env:
+          ACCESS_TOKEN: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
+        run: python latest_dropbox.py
