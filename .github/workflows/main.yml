@@ -30,7 +30,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .last_run.txt
-          key: last-run-file
+          key: last-run-file-${{ github.run_id }}
+          restore-keys: |
+            last-run-file-
 
       - name: Ensure last-run file exists
         run: |
@@ -63,6 +65,6 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .last_run.txt
-          key: last-run-file
+          key: last-run-file-${{ github.run_id }}
         # Hack: actions/cache doesn't support update in same job unless key changes
         # Instead, we overwrite the cache by using restore-keys
