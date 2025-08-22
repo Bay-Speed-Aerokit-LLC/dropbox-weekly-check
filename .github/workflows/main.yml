@@ -24,12 +24,21 @@ jobs:
       - name: Install dependencies
         run: pip install dropbox rembg pillow onnxruntime
 
-      # ⬇️ Restore last run state
-      - name: Download last run state
-        uses: actions/download-artifact@v4
+      # Try to download last-run.txt, but ignore errors if it doesn't exist
+      - name: Download last-run file
+        id: last-run
+        continue-on-error: true
+        uses: actions/download-artifact@v3
         with:
           name: last-run-file
-        continue-on-error: true
+          path: .
+
+      # If no artifact, create a default last-run.txt
+      - name: Ensure last-run file exists
+        run: |
+          if [ ! -f .last_run.txt ]; then
+            echo "1970-01-01T00:00:00" > .last_run.txt
+          fi
 
       - name: Run Dropbox script
         env:
