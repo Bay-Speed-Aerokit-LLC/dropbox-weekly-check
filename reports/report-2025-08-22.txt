@@ -60,8 +60,8 @@ downloads/674-BMF/images/W674-BMF-02.webp white background reapplied.
 downloads/674-BMF/images/W674-BMF-03.webp white background reapplied.
 '/domains/ipwstock.com/public_html/public/dropbox/674-BMF/W674-BMF-01.webp' transferred to the remote server.
 '/domains/ipwstock.com/public_html/public/dropbox/674-BMF/W674-BMF-02.webp' already exists on the remote server.
-'/domains/ipwstock.com/public_html/public/dropbox/674-BMF/W674-BMF-03.webp' transferred to the remote server.
+'/domains/ipwstock.com/public_html/public/dropbox/674-BMF/W674-BMF-03.webp' already exists on the remote server.
 '/domains/ipwstock.com/public_html/public/dropbox/674-BMF/images/W674-BMF-01.webp' already exists on the remote server.
 '/domains/ipwstock.com/public_html/public/dropbox/674-BMF/images/W674-BMF-02.webp' already exists on the remote server.
-Uploaded: /domains/ipwstock.com/public_html/public/dropbox/674-BMF/images/W674-BMF-03.webp
+'/domains/ipwstock.com/public_html/public/dropbox/674-BMF/images/W674-BMF-03.webp' already exists on the remote server.
 '/domains/ipwstock.com/public_html/public/dropbox/674-BMF/PNG/674-BMF.png' already exists on the remote server.
