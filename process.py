@@ -3,53 +3,17 @@ import time
 import io
 from rembg import remove
 from PIL import Image
+import pandas as pd
 import ftplib
-import dropbox
-from datetime import datetime
 
-# === Dropbox Setup ===
-ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]   # from GitHub Secrets
-ACCESS_TOKEN = ''
-dbx = dropbox.Dropbox(ACCESS_TOKEN)
+base_folder = "/Downloads"
+ipw_folder_list = os.listdir(base_folder)
 
-MAIN_FOLDER = "/Levinbo Test Dropbox Folder"  # Shared folder name
-
-# === FTP Setup ===
-FTP_HOST = 'ipwstock.com'
-FTP_USER = 'u307603549'
-FTP_PASS = '@BayspeedautoFTP.1234..'
-REMOTE_BASE_PATH = '/domains/ipwstock.com/public_html/public/dropbox/'
-
-
-def download_dropbox_folder(local_base, dropbox_path):
-    """
-    Download an entire folder from Dropbox into local_base,
-    preserving structure.
-    """
-    try:
-        result = dbx.files_list_folder(dropbox_path)
-    except dropbox.exceptions.ApiError as e:
-        print(f"Error listing {dropbox_path}: {e}")
-        return
-
-    for entry in result.entries:
-        local_path = os.path.join(local_base, entry.name)
-        if isinstance(entry, dropbox.files.FileMetadata):
-            # Only download images
-            if entry.name.lower().endswith(('.jpg', '.png')):
-                dbx.files_download_to_file(local_path, entry.path_lower)
-                print(f"Downloaded {entry.path_lower} -> {local_path}")
-        elif isinstance(entry, dropbox.files.FolderMetadata):
-            os.makedirs(local_path, exist_ok=True)
-            download_dropbox_folder(local_path, entry.path_lower)
-
-
-def process_folder(base_folder, folder):
-    """
-    Run your original STEP 1–7 processing logic
-    on a given folder that’s already downloaded locally.
-    """
+for folder in ipw_folder_list:
+    
     folder_path = os.path.join(base_folder, folder)
+    if not os.path.isdir(folder_path):
+        continue
 
     # === STEP 1: Resize to 6000x4000 & white background ===
     file_list = os.listdir(folder_path)
@@ -175,42 +139,52 @@ def process_folder(base_folder, folder):
             print(f"{input_image_path} white background reapplied.")
 
     # === STEP 7: Store Image to hostinger account ===
-    ftp = ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS)
-    ftp.cwd(REMOTE_BASE_PATH)
+    # FTP CREDENTIALS
+    ftp = ftplib.FTP('ipwstock.com', 'u307603549', 'password')
+    remote_base_path = '/domains/ipwstock.com/public_html/public/dropbox/'
+    
+    remote_folder_path = os.path.join(remote_base_path, folder)
+    ftp.cwd('/domains/ipwstock.com/public_html/public/dropbox/')
 
-    remote_folder_path = os.path.join(REMOTE_BASE_PATH, folder)
+    # Check if the remote folder exists
     remote_folders = ftp.nlst()
+
     if folder not in remote_folders:
         ftp.mkd(remote_folder_path)
         print(f"'{folder}' created on the remote server.")
 
+    # === Helper function to upload a folder recursively ===
     def upload_folder(local_path, remote_path):
         """Uploads all files in a folder to FTP, skipping existing files."""
+        # Ensure remote directory exists
         try:
             ftp.mkd(remote_path)
             print(f"Created remote directory: {remote_path}")
         except ftplib.error_perm as e:
             if not str(e).startswith("550"):
-                raise
+                raise  # Only ignore 'already exists' errors
+
+        # Upload all files in the folder
         for filename in os.listdir(local_path):
             local_file = os.path.join(local_path, filename)
             remote_file = f"{remote_path}/{filename}"
+
             if os.path.isfile(local_file):
                 try:
-                    ftp.size(remote_file)
+                    ftp.size(remote_file)  # Check if file exists
                     print(f"'{remote_file}' already exists on the remote server.")
                 except ftplib.error_perm as e:
-                    if "550" in str(e):
+                    if "550" in str(e):  # File not found
                         with open(local_file, 'rb') as f:
                             ftp.storbinary(f"STOR {remote_file}", f)
                         print(f"Uploaded: {remote_file}")
                     else:
                         print(f"Error checking '{remote_file}': {str(e)}")
 
-    # Upload main .webp
-    main_webp_list = [x for x in os.listdir(folder_path) if x.endswith('.webp')]
+    # === Upload main .webp files ===
+    main_webp_list = [x for x in os.listdir(os.path.join(base_folder, folder)) if x.endswith('.webp')]
     for webp_image in main_webp_list:
-        local_image_path = os.path.join(folder_path, webp_image)
+        local_image_path = os.path.join(base_folder, folder, webp_image)
         server_path = f"{remote_folder_path}/{webp_image}"
         try:
             ftp.size(server_path)
@@ -223,29 +197,15 @@ def process_folder(base_folder, folder):
             else:
                 print(f"Error checking '{webp_image}': {str(e)}")
 
-    # Upload images & PNG folders
-    if os.path.exists(images_folder):
-        upload_folder(images_folder, f"{remote_folder_path}/images")
-    if os.path.exists(png_folder):
-        upload_folder(png_folder, f"{remote_folder_path}/PNG")
+    # === Upload 'images' folder ===
+    images_local = os.path.join(base_folder, folder, "images")
+    if os.path.exists(images_local):
+        images_remote = f"{remote_folder_path}/images"
+        upload_folder(images_local, images_remote)
 
-    ftp.quit()
-
-
-def main():
-    local_downloads = "downloads"  # where Dropbox folders will be mirrored locally
-    os.makedirs(local_downloads, exist_ok=True)
-
-    # Download all subfolders from Dropbox into local_downloads
-    result = dbx.files_list_folder(MAIN_FOLDER)
-    for entry in result.entries:
-        if isinstance(entry, dropbox.files.FolderMetadata):
-            local_path = os.path.join(local_downloads, entry.name)
-            os.makedirs(local_path, exist_ok=True)
-            print(f"Downloading folder: {entry.name}")
-            download_dropbox_folder(local_path, entry.path_lower)
-            process_folder(local_downloads, entry.name)
-
-
-if __name__ == "__main__":
-    main()
+    # === Upload 'PNG' folder ===
+    png_local = os.path.join(base_folder, folder, "PNG")
+    if os.path.exists(png_local):
+        png_remote = f"{remote_folder_path}/PNG"
+        upload_folder(png_local, png_remote)
+ftp.quit()

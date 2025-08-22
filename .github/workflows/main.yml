@@ -1,27 +1,40 @@
-name: Weekly Dropbox Job
+name: Dropbox Weekly Report
 
 on:
   schedule:
-    - cron: '0 0 * * 0'   # every Sunday 00:00 UTC
-  workflow_dispatch:        # allows you to run manually too
+    - cron: "0 16 * * 0"   # Every Sunday midnight PHT (16:00 UTC Sunday)
+  workflow_dispatch:        # manual trigger also
 
 jobs:
-  run-script:
+  dropbox:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v3
+        with:
+          persist-credentials: false
 
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: "3.x"
 
       - name: Install dependencies
         run: pip install dropbox
 
-      - name: Run Dropbox Script
+      - name: Run Dropbox script
+        run: python latest_dropbox.py > report.txt
         env:
           ACCESS_TOKEN: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
-        run: python latest_dropbox.py
+
+      - name: Commit report
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p reports
+          mv report.txt reports/report-$(date +'%Y-%m-%d').txt
+          git add reports/
+          git commit -m "Weekly Dropbox Report - $(date +'%Y-%m-%d')" || echo "No changes to commit"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
