@@ -60,8 +60,9 @@ jobs:
 
       # Update cache with new last-run file
       - name: Save last-run state
-        if: always()
-        run: |
-          echo "Saving last-run timestamp..."
+        uses: actions/cache/save@v4
+        with:
+          path: .last_run.txt
+          key: last-run-file
         # Hack: actions/cache doesn't support update in same job unless key changes
         # Instead, we overwrite the cache by using restore-keys
