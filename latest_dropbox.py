@@ -8,12 +8,11 @@ import dropbox
 from datetime import datetime
 
 # === Dropbox Setup ===
-ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]   # from GitHub Secrets
-
-if not ACCESS_TOKEN:
-    raise Exception("Missing Dropbox ACCESS_TOKEN. Did you set the GitHub secret?")
-
-dbx = dropbox.Dropbox(ACCESS_TOKEN)
+dbx = dropbox.Dropbox(
+    oauth2_refresh_token=os.environ["DROPBOX_REFRESH_TOKEN"],
+    app_key=os.environ["DROPBOX_APP_KEY"],
+    app_secret=os.environ["DROPBOX_APP_SECRET"],
+)
 
 MAIN_FOLDER = "/Levinbo Test Dropbox Folder"  # Shared folder name
 
