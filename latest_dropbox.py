@@ -272,7 +272,10 @@ def main():
                 
                 has_new = download_dropbox_folder(local_path, entry.path_lower, last_run)
                 if has_new:
-                    process_folder(local_downloads, entry.name)
+                    try:
+                        process_folder(local_downloads, entry.name)
+                    except Exception as e:
+                        print(f"Error processing {entry.name}: {e}")
 
         if result.has_more:
             result = dbx.files_list_folder_continue(result.cursor)
