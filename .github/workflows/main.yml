@@ -8,6 +8,7 @@ on:
 jobs:
   dropbox:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
@@ -35,6 +36,4 @@ jobs:
           mv report.txt reports/report-$(date +'%Y-%m-%d').txt
           git add reports/
           git commit -m "Weekly Dropbox Report - $(date +'%Y-%m-%d')" || echo "No changes to commit"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
