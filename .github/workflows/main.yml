@@ -3,9 +3,11 @@ name: Dropbox Weekly Report
 on:
   schedule:
     - cron: "0 16 * * 0"   # Every Sunday midnight PHT (16:00 UTC Sunday)
-  workflow_dispatch:        # manual trigger also
+  workflow_dispatch:        # Manual trigger
+
 permissions:
-  contents: write   # 👈 allow pushing changes
+  contents: write
+
 jobs:
   dropbox:
     runs-on: ubuntu-latest
@@ -17,20 +19,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.x"
+          python-version: "3.10"
 
-      - name: Install Dropbox
-        run: pip install dropbox
-
-      - name: Install image processing libs
-        run: pip install rembg pillow onnxruntime
+      - name: Install dependencies
+        run: pip install dropbox rembg pillow onnxruntime
 
       - name: Run Dropbox script
-        run: python latest_dropbox.py > report.txt
         env:
           DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
           DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
           DROPBOX_APP_SECRET: ${{ secrets.DROPBOX_APP_SECRET }}
+        run: python latest_dropbox.py > report.txt
 
       - name: Commit report
         run: |
