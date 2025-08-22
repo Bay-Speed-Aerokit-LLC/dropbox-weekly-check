@@ -24,7 +24,7 @@ jobs:
         run: pip install dropbox
 
       - name: Install image processing libs
-        run: pip install rembg pillow
+        run: pip install rembg pillow onnxruntime
 
       - name: Run Dropbox script
         run: python latest_dropbox.py > report.txt
