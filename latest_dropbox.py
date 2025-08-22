@@ -24,28 +24,40 @@ FTP_PASS = '@BayspeedautoFTP.1234..'
 REMOTE_BASE_PATH = '/domains/ipwstock.com/public_html/public/dropbox/'
 
 
-def download_dropbox_folder(local_base, dropbox_path):
-    """
-    Download an entire folder from Dropbox into local_base,
-    preserving structure.
-    """
+def get_last_run_time():
+    if os.path.exists(".last_run.txt"):
+        with open(".last_run.txt", "r") as f:
+            return datetime.fromisoformat(f.read().strip())
+    return None
+
+def update_last_run_time():
+    with open(".last_run.txt", "w") as f:
+        f.write(datetime.utcnow().isoformat())
+
+def download_dropbox_folder(local_base, dropbox_path, last_run):
     try:
         result = dbx.files_list_folder(dropbox_path)
     except dropbox.exceptions.ApiError as e:
         print(f"Error listing {dropbox_path}: {e}")
-        return
+        return False
 
+    new_files = False
     for entry in result.entries:
         local_path = os.path.join(local_base, entry.name)
+
         if isinstance(entry, dropbox.files.FileMetadata):
             # Only download images
             if entry.name.lower().endswith(('.jpg', '.png')):
-                dbx.files_download_to_file(local_path, entry.path_lower)
-                print(f"Downloaded {entry.path_lower} -> {local_path}")
+                if not last_run or entry.server_modified > last_run:
+                    dbx.files_download_to_file(local_path, entry.path_lower)
+                    print(f"Downloaded NEW file {entry.path_lower} -> {local_path}")
+                    new_files = True
         elif isinstance(entry, dropbox.files.FolderMetadata):
             os.makedirs(local_path, exist_ok=True)
-            download_dropbox_folder(local_path, entry.path_lower)
+            if download_dropbox_folder(local_path, entry.path_lower, last_run):
+                new_files = True
 
+    return new_files
 
 def process_folder(base_folder, folder):
     """
@@ -234,21 +246,22 @@ def process_folder(base_folder, folder):
 
     ftp.quit()
 
-
 def main():
-    local_downloads = "downloads"  # where Dropbox folders will be mirrored locally
+    last_run = get_last_run_time()
+    local_downloads = "downloads"
     os.makedirs(local_downloads, exist_ok=True)
 
-    # Download all subfolders from Dropbox into local_downloads
     result = dbx.files_list_folder(MAIN_FOLDER)
     for entry in result.entries:
         if isinstance(entry, dropbox.files.FolderMetadata):
             local_path = os.path.join(local_downloads, entry.name)
             os.makedirs(local_path, exist_ok=True)
-            print(f"Downloading folder: {entry.name}")
-            download_dropbox_folder(local_path, entry.path_lower)
-            process_folder(local_downloads, entry.name)
+            print(f"Checking folder: {entry.name}")
+            has_new = download_dropbox_folder(local_path, entry.path_lower, last_run)
+            if has_new:
+                process_folder(local_downloads, entry.name)
 
+    update_last_run_time()
 
 if __name__ == "__main__":
     main()
