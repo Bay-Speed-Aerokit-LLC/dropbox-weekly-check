@@ -20,8 +20,11 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Install dependencies
+      - name: Install Dropbox
         run: pip install dropbox
+
+      - name: Install image processing libs
+        run: pip install rembg pillow
 
       - name: Run Dropbox script
         run: python latest_dropbox.py > report.txt
