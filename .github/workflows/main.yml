@@ -4,7 +4,8 @@ on:
   schedule:
     - cron: "0 16 * * 0"   # Every Sunday midnight PHT (16:00 UTC Sunday)
   workflow_dispatch:        # manual trigger also
-
+permissions:
+  contents: write   # 👈 allow pushing changes
 jobs:
   dropbox:
     runs-on: ubuntu-latest
