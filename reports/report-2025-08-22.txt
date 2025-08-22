@@ -1,8 +1,8 @@
-Downloading folder: 560-SB
-Downloaded /levinbo test dropbox folder/560-sb/w560-sb-03.jpg -> downloads/560-SB/W560-SB-03.JPG
-Downloaded /levinbo test dropbox folder/560-sb/w560-sb-04.jpg -> downloads/560-SB/W560-SB-04.JPG
-Downloaded /levinbo test dropbox folder/560-sb/w560-sb-01.jpg -> downloads/560-SB/W560-SB-01.JPG
-Downloaded /levinbo test dropbox folder/560-sb/w560-sb-02.jpg -> downloads/560-SB/W560-SB-02.JPG
+Checking folder: 560-SB
+Downloaded NEW file /levinbo test dropbox folder/560-sb/w560-sb-03.jpg -> downloads/560-SB/W560-SB-03.JPG
+Downloaded NEW file /levinbo test dropbox folder/560-sb/w560-sb-04.jpg -> downloads/560-SB/W560-SB-04.JPG
+Downloaded NEW file /levinbo test dropbox folder/560-sb/w560-sb-01.jpg -> downloads/560-SB/W560-SB-01.JPG
+Downloaded NEW file /levinbo test dropbox folder/560-sb/w560-sb-02.jpg -> downloads/560-SB/W560-SB-02.JPG
 downloads/560-SB/W560-SB-02.JPG resized to 6000x4000 with white background.
 downloads/560-SB/W560-SB-04.JPG resized to 6000x4000 with white background.
 downloads/560-SB/W560-SB-03.JPG resized to 6000x4000 with white background.
