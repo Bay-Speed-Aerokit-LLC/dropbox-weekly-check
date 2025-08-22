@@ -28,12 +28,11 @@ jobs:
       - name: Download last-run file
         id: last-run
         continue-on-error: true
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: last-run-file
           path: .
 
-      # If no artifact, create a default last-run.txt
       - name: Ensure last-run file exists
         run: |
           if [ ! -f .last_run.txt ]; then
