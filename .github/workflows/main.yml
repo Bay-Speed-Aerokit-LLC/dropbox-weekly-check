@@ -25,7 +25,7 @@ jobs:
         run: pip install dropbox rembg pillow onnxruntime
 
       # Try to download last-run.txt, but ignore errors if it doesn't exist
-      - name: Download last-run file
+      - name: Download last-run file (if exists)
         id: last-run
         continue-on-error: true
         uses: actions/download-artifact@v4
