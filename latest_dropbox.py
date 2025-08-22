@@ -17,9 +17,9 @@ dbx = dropbox.Dropbox(
 MAIN_FOLDER = "/Levinbo Test Dropbox Folder"  # Shared folder name
 
 # === FTP Setup ===
-FTP_HOST = 'ipwstock.com'
-FTP_USER = 'u307603549'
-FTP_PASS = '@BayspeedautoFTP.1234..'
+FTP_HOST = os.environ["FTP_HOST"]
+FTP_USER = os.environ["FTP_USER"]
+FTP_PASS = os.environ["FTP_PASS"]
 REMOTE_BASE_PATH = '/domains/ipwstock.com/public_html/public/dropbox/'
 
 
@@ -41,21 +41,32 @@ def download_dropbox_folder(local_base, dropbox_path, last_run):
         return False
 
     new_files = False
-    for entry in result.entries:
-        local_path = os.path.join(local_base, entry.name)
+    
+    while True:
+        
+        for entry in result.entries:
+            local_path = os.path.join(local_base, entry.name)
 
-        if isinstance(entry, dropbox.files.FileMetadata):
-            # Only download images
-            if entry.name.lower().endswith(('.jpg', '.png')):
-                if not last_run or entry.server_modified > last_run:
-                    dbx.files_download_to_file(local_path, entry.path_lower)
-                    print(f"Downloaded NEW file {entry.path_lower} -> {local_path}")
+            if isinstance(entry, dropbox.files.FileMetadata):
+                # Only download images
+                if entry.name.lower().endswith(('.jpg', '.png')):
+                    if not last_run or entry.server_modified > last_run:
+                        dbx.files_download_to_file(local_path, entry.path_lower)
+                        print(f"Downloaded NEW file {entry.path_lower} -> {local_path}")
+                        new_files = True
+            elif isinstance(entry, dropbox.files.FolderMetadata):
+                os.makedirs(local_path, exist_ok=True)
+                if download_dropbox_folder(local_path, entry.path_lower, last_run):
                     new_files = True
-        elif isinstance(entry, dropbox.files.FolderMetadata):
-            os.makedirs(local_path, exist_ok=True)
-            if download_dropbox_folder(local_path, entry.path_lower, last_run):
-                new_files = True
-
+                    
+        if result.has_more:
+            
+            result = dbx.files_list_folder_continue(result.cursor)
+            
+        else:
+        
+            break
+        
     return new_files
 
 def process_folder(base_folder, folder):
@@ -115,7 +126,7 @@ def process_folder(base_folder, folder):
             continue
         remove_bg = remove(img)
         webp_path = file_path + '.webp'
-        remove_bg.save(webp_path, format="webp", optimize=True, quality=10)
+        remove_bg.save(webp_path, format="webp", optimize=True, quality=80)
         print(f"{image_file} background removed & saved as webp.")
 
     # === STEP 3: Clean up original images ===
@@ -249,18 +260,28 @@ def main():
     last_run = get_last_run_time()
     local_downloads = "downloads"
     os.makedirs(local_downloads, exist_ok=True)
-
+    
     result = dbx.files_list_folder(MAIN_FOLDER)
-    for entry in result.entries:
-        if isinstance(entry, dropbox.files.FolderMetadata):
-            local_path = os.path.join(local_downloads, entry.name)
-            os.makedirs(local_path, exist_ok=True)
-            print(f"Checking folder: {entry.name}")
-            has_new = download_dropbox_folder(local_path, entry.path_lower, last_run)
-            if has_new:
-                process_folder(local_downloads, entry.name)
 
+    while True:
+        for entry in result.entries:
+            if isinstance(entry, dropbox.files.FolderMetadata):
+                local_path = os.path.join(local_downloads, entry.name)
+                os.makedirs(local_path, exist_ok=True)
+                print(f"Checking folder: {entry.name}")
+                
+                has_new = download_dropbox_folder(local_path, entry.path_lower, last_run)
+                if has_new:
+                    process_folder(local_downloads, entry.name)
+
+        if result.has_more:
+            result = dbx.files_list_folder_continue(result.cursor)
+        else:
+            break
+
+    # Update timestamp once all folders are processed
     update_last_run_time()
+
 
 if __name__ == "__main__":
     main()

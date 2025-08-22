@@ -24,6 +24,13 @@ jobs:
       - name: Install dependencies
         run: pip install dropbox rembg pillow onnxruntime
 
+      # ⬇️ Restore last run state
+      - name: Download last run state
+        uses: actions/download-artifact@v4
+        with:
+          name: last-run-file
+        continue-on-error: true
+
       - name: Run Dropbox script
         env:
           DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
@@ -40,3 +47,10 @@ jobs:
           git add reports/
           git commit -m "Weekly Dropbox Report - $(date +'%Y-%m-%d')" || echo "No changes to commit"
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
+
+      # ⬆️ Save last run state for next time
+      - name: Upload last run state
+        uses: actions/upload-artifact@v4
+        with:
+          name: last-run-file
+          path: .last_run.txt
