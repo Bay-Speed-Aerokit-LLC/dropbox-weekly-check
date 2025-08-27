@@ -23,7 +23,7 @@ jobs:
           python-version: "3.10"
 
       - name: Install dependencies
-        run: pip install dropbox rembg pillow onnxruntime
+        run: pip install --upgrade dropbox rembg pillow onnxruntime
 
       # Restore last-run file from cache
       - name: Restore last-run state
