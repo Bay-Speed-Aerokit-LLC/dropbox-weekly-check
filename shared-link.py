@@ -1,12 +1,12 @@
 import os
 import time
 import io
+import requests
 from rembg import remove
 from PIL import Image
 import ftplib
 import dropbox
 from datetime import datetime
-from dropbox.files import ListFolderArg, SharedLink
 
 # === Dropbox Setup ===
 dbx = dropbox.Dropbox(
@@ -25,6 +25,60 @@ FTP_PASS = os.environ["FTP_PASS"]
 REMOTE_BASE_PATH = '/domains/ipwstock.com/public_html/public/dropbox/'
 
 
+# ----------------------------
+# Helpers for Dropbox v12
+# ----------------------------
+def get_access_token(dbx: dropbox.Dropbox):
+    return dbx._oauth2_access_token
+
+
+def list_shared_link_files(shared_link_url):
+    token = get_access_token(dbx)
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    endpoint = "https://api.dropboxapi.com/2/sharing/list_shared_link_files"
+    payload = {"url": shared_link_url}
+
+    entries = []
+    while True:
+        resp = requests.post(endpoint, headers=headers, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        entries.extend(data["entries"])
+
+        if data.get("has_more"):
+            endpoint = "https://api.dropboxapi.com/2/sharing/list_shared_link_files/continue"
+            payload = {"cursor": data["cursor"]}
+        else:
+            break
+
+    return entries
+
+
+def download_shared_file(shared_link_url, file_metadata, local_dir):
+    token = get_access_token(dbx)
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Dropbox-API-Arg": '{"url": "%s", "path": "%s"}'
+        % (shared_link_url, file_metadata["path_lower"]),
+    }
+    endpoint = "https://content.dropboxapi.com/2/sharing/get_shared_link_file"
+
+    resp = requests.post(endpoint, headers=headers, stream=True)
+    resp.raise_for_status()
+
+    os.makedirs(local_dir, exist_ok=True)
+    local_path = os.path.join(local_dir, file_metadata["name"])
+    with open(local_path, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=8192):
+            f.write(chunk)
+
+    print(f"Downloaded: {local_path}")
+    return local_path
+
+
+# ----------------------------
+# State tracking
+# ----------------------------
 def get_last_run_time():
     if os.path.exists(".last_run.txt"):
         with open(".last_run.txt", "r") as f:
@@ -36,42 +90,11 @@ def update_last_run_time():
     with open(".last_run.txt", "w") as f:
         f.write(datetime.utcnow().isoformat())
 
-def download_shared_folder(local_path, dropbox_path, last_run):
-    try:
-        res = dbx.files_list_folder(dropbox_path)
-    except Exception as e:
-        print(f"Error listing {dropbox_path}: {e}")
-        return False
 
-    has_new = False
-
-    for entry in res.entries:
-        # If it's a folder, recurse
-        if isinstance(entry, dropbox.files.FolderMetadata):
-            sub_local_path = os.path.join(local_path, entry.name)  # ✅ use entry.name only
-            os.makedirs(sub_local_path, exist_ok=True)
-
-            if download_shared_folder(sub_local_path, entry.path_lower, last_run):
-                has_new = True
-
-        elif isinstance(entry, dropbox.files.FileMetadata):
-            local_file_path = os.path.join(local_path, entry.name)
-
-            # ✅ Avoid re-downloading unless updated
-            if not os.path.exists(local_file_path) or entry.client_modified.timestamp() > last_run.timestamp():
-                with open(local_file_path, "wb") as f:
-                    metadata, res = dbx.files_download(entry.path_lower)
-                    f.write(res.content)
-                print(f"Downloaded: {entry.path_lower}")
-                has_new = True
-
-    return has_new
-
-
+# ----------------------------
+# Processing pipeline
+# ----------------------------
 def process_folder(base_folder, folder):
-    """
-    Step 1–7 processing logic on downloaded folder.
-    """
     folder_path = os.path.join(base_folder, folder)
 
     # === STEP 1: Resize to 6000x4000 & white background ===
@@ -122,7 +145,7 @@ def process_folder(base_folder, folder):
         remove_bg.save(webp_path, format="webp", optimize=True, quality=80)
         print(f"{file} background removed & saved as webp.")
 
-    # === STEP 3: Clean up original images ===
+    # === STEP 3: Clean up originals ===
     for file in os.listdir(folder_path):
         file_path = os.path.join(folder_path, file)
         time.sleep(1)
@@ -246,35 +269,31 @@ def process_folder(base_folder, folder):
 
     ftp.quit()
 
-
+# ----------------------------
+# Main
+# ----------------------------
 def main():
     last_run = get_last_run_time()
     local_downloads = "downloads"
     os.makedirs(local_downloads, exist_ok=True)
-    
-    result = dbx.sharing_list_shared_link_files(
-        SharedLink(url=SHARED_LINK)
-    )
 
-    while True:
-        for entry in result.entries:
-            if isinstance(entry, dropbox.files.FolderMetadata):
-                local_path = os.path.join("downloads", entry.name)
-                os.makedirs(local_path, exist_ok=True)
-                print(f"Checking shared folder: {entry.name}")
-                has_new = download_shared_folder(local_path, entry.path_lower, last_run)
-                if has_new:
-                    try:
-                        process_folder("downloads", entry.name)
-                    except Exception as e:
-                        print(f"Error processing {entry.name}: {e}")
-            elif isinstance(entry, dropbox.files.FileMetadata):
-                print(f"File found: {entry.name}")
+    # List all files from shared link
+    entries = list_shared_link_files(SHARED_LINK)
 
-        if result.has_more:
-            result = dbx.sharing_list_shared_link_files_continue(result.cursor)
-        else:
-            break
+    for entry in entries:
+        if entry[".tag"] == "file":
+            local_file = download_shared_file(SHARED_LINK, entry, local_downloads)
+
+            if not last_run or os.path.getmtime(local_file) > last_run.timestamp():
+                folder_name = os.path.splitext(entry["name"])[0]
+                folder_path = os.path.join(local_downloads, folder_name)
+                os.makedirs(folder_path, exist_ok=True)
+                os.rename(local_file, os.path.join(folder_path, entry["name"]))
+
+                try:
+                    process_folder(local_downloads, folder_name)
+                except Exception as e:
+                    print(f"Error processing {folder_name}: {e}")
 
     update_last_run_time()
 
