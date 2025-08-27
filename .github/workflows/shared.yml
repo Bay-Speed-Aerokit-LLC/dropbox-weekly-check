@@ -26,7 +26,7 @@ jobs:
         run: pip install --upgrade dropbox rembg pillow onnxruntime
 
       - name: Check Dropbox SDK version
-        run: python -c "import dropbox; print(dropbox.__file__); print('Dropbox SDK version:', dropbox.__version__)"
+        run: python -c "import dropbox; print(dropbox.__file__); print('Dropbox SDK version:', dropbox.__version__); print([m for m in dir(dropbox.Dropbox) if 'sharing' in m])"
 
       # Restore last-run file from cache
       - name: Restore last-run state
