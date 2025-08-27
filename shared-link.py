@@ -6,6 +6,7 @@ from PIL import Image
 import ftplib
 import dropbox
 from datetime import datetime
+from dropbox.files import ListFolderArg, SharedLink
 
 # === Dropbox Setup ===
 dbx = dropbox.Dropbox(
@@ -260,8 +261,10 @@ def main():
     last_run = get_last_run_time()
     local_downloads = "downloads"
     os.makedirs(local_downloads, exist_ok=True)
-
-    result = dbx.sharing_list_shared_link_files(url=SHARED_LINK)
+    
+    shared_link = SharedLink(url=SHARED_LINK)
+    
+    result = dbx.files_list_folder(ListFolderArg(path="", shared_link=shared_link))
 
     while True:
         for entry in result.entries:
