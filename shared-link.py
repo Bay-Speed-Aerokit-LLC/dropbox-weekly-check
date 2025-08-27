@@ -68,8 +68,10 @@ def download_shared_folder(local_base, subpath, last_run):
                         new_files = True
 
             elif isinstance(entry, dropbox.files.FolderMetadata):
-                os.makedirs(local_path, exist_ok=True)
-                if download_shared_folder(local_path, entry.path_lower, last_run):
+                sub_local_path = os.path.join(local_base, entry.name)
+                os.makedirs(sub_local_path, exist_ok=True)
+                
+                if download_shared_folder(sub_local_path, entry.path_lower, last_run):
                     new_files = True
 
         if result.has_more:
