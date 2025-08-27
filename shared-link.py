@@ -36,13 +36,15 @@ def update_last_run_time():
     with open(".last_run.txt", "w") as f:
         f.write(datetime.utcnow().isoformat())
 
-
 def download_shared_folder(local_base, subpath, last_run):
     """
     Download all new files from a shared link folder (recursive).
     """
     try:
-        result = dbx.sharing_list_shared_link_files(url=SHARED_LINK, path=subpath)
+        result = dbx.files_list_folder(
+            path=subpath or "",
+            shared_link=SharedLink(url=SHARED_LINK)
+        )
     except dropbox.exceptions.ApiError as e:
         print(f"Error listing {subpath}: {e}")
         return False
@@ -71,7 +73,7 @@ def download_shared_folder(local_base, subpath, last_run):
                     new_files = True
 
         if result.has_more:
-            result = dbx.sharing_list_shared_link_files_continue(result.cursor)
+            result = dbx.files_list_folder_continue(result.cursor)
         else:
             break
 
@@ -262,9 +264,10 @@ def main():
     local_downloads = "downloads"
     os.makedirs(local_downloads, exist_ok=True)
     
-    shared_link = SharedLink(url=SHARED_LINK)
-    
-    result = dbx.files_list_folder(ListFolderArg(path="", shared_link=shared_link))
+    result = dbx.files_list_folder(
+        path="", 
+        shared_link=SharedLink(url=SHARED_LINK)
+    )
 
     while True:
         for entry in result.entries:
