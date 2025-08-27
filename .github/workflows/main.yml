@@ -49,7 +49,7 @@ jobs:
           FTP_HOST: ${{ secrets.FTP_HOST }}
           FTP_USER: ${{ secrets.FTP_USER }}
           FTP_PASS: ${{ secrets.FTP_PASS }}
-        run: python latest_dropbox.py > report.txt
+        run: python shared-link.py > report.txt
 
       - name: Commit report
         run: |
