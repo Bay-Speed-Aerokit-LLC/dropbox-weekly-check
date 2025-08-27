@@ -23,7 +23,7 @@ jobs:
           python-version: "3.10"
 
       - name: Install dependencies
-        run: pip install --upgrade dropbox rembg pillow onnxruntime
+        run: pip install --upgrade --force-reinstall "dropbox>=14.0.0" rembg pillow onnxruntime
 
       - name: Check Dropbox SDK version
         run: python -c "import dropbox; print(dropbox.__file__); print('Dropbox SDK version:', dropbox.__version__); print([m for m in dir(dropbox.Dropbox) if 'sharing' in m])"
