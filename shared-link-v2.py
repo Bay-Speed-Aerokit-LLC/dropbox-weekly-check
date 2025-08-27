@@ -223,65 +223,69 @@ def process_folder(base_folder, folder):
 # ----------------------------
 # Main
 # ----------------------------
+
 def main():
-    
-    last_run = get_last_run_time()  # timestamp of last run
+    last_run = get_last_run_time()
     local_downloads = "downloads"
     os.makedirs(local_downloads, exist_ok=True)
 
-    # ✅ Use Dropbox SDK instead of manual requests
+    # Create SharedLink object
     link = dropbox.files.SharedLink(url=SHARED_LINK)
-    result = dbx.files_list_folder(path="", shared_link=link)
 
+    # List root contents of the shared link
+    result = dbx.files_list_folder(path="", shared_link=link)
     entries = result.entries
     while result.has_more:
         result = dbx.files_list_folder_continue(result.cursor)
         entries.extend(result.entries)
 
-    # ✅ Get only folders with "-" in their name
+    # Only top-level folders with "-" in the name
     target_folders = [
-        entry for entry in entries
-        if isinstance(entry, dropbox.files.FolderMetadata) and "-" in entry.name
+        e for e in entries
+        if isinstance(e, dropbox.files.FolderMetadata) and "-" in e.name
     ]
 
     print("📂 Found target folders:", [f.name for f in target_folders])
 
-    # Download + process each folder
+    # Download + process each folder (top-level only)
     for folder in target_folders:
         folder_name = folder.name
         folder_path = os.path.join(local_downloads, folder_name)
         os.makedirs(folder_path, exist_ok=True)
 
-        # List files inside this folder
-        sub_result = dbx.files_list_folder(path=folder.path_lower, shared_link=link)
-        sub_entries = sub_result.entries
-        while sub_result.has_more:
-            sub_result = dbx.files_list_folder_continue(sub_result.cursor)
-            sub_entries.extend(sub_result.entries)
+        # List files only in this folder (no subfolders)
+        folder_result = dbx.files_list_folder(path="", shared_link=dropbox.files.SharedLink(url=SHARED_LINK, path=folder_name))
+        folder_entries = folder_result.entries
+        while folder_result.has_more:
+            folder_result = dbx.files_list_folder_continue(folder_result.cursor)
+            folder_entries.extend(folder_result.entries)
 
-        # Download each file if it's new or updated
-        for entry in sub_entries:
+        # Download files
+        for entry in folder_entries:
             if isinstance(entry, dropbox.files.FileMetadata):
-                # Compare with last run
-                entry_modified = entry.server_modified.replace(tzinfo=None)
-                if last_run and entry_modified <= last_run:
-                    print(f"⏭ Skipping {entry.name}, not updated since last run.")
+                # Only process jpg/png
+                if not entry.name.lower().endswith((".jpg", ".png")):
                     continue
 
-                # Download file
+                # Check last modification time
+                modified_time = entry.server_modified
+                if last_run and modified_time <= last_run:
+                    continue  # Skip older files
+
                 md, res = dbx.files_download(entry.path_lower)
                 local_file_path = os.path.join(folder_path, entry.name)
                 with open(local_file_path, "wb") as f:
                     f.write(res.content)
                 print(f"⬇ Downloaded {entry.name} → {local_file_path}")
 
-        # Run your processing pipeline
+        # Process the folder
         try:
             process_folder(local_downloads, folder_name)
         except Exception as e:
             print(f"❌ Error processing {folder_name}: {e}")
 
-    update_last_run_time()  # update last run after all processing
+    update_last_run_time()
+
 
 if __name__ == "__main__":
     main()
