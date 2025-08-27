@@ -36,50 +36,36 @@ def update_last_run_time():
     with open(".last_run.txt", "w") as f:
         f.write(datetime.utcnow().isoformat())
 
-def download_shared_folder(local_base, subpath, last_run):
-    """
-    Download all new files from a shared link folder (recursive).
-    """
+def download_shared_folder(local_path, dropbox_path, last_run):
     try:
-        result = dbx.files_list_folder(
-            path=subpath or "",
-            shared_link=SharedLink(url=SHARED_LINK)
-        )
-    except dropbox.exceptions.ApiError as e:
-        print(f"Error listing {subpath}: {e}")
+        res = dbx.files_list_folder(dropbox_path)
+    except Exception as e:
+        print(f"Error listing {dropbox_path}: {e}")
         return False
 
-    new_files = False
+    has_new = False
 
-    while True:
-        for entry in result.entries:
-            local_path = os.path.join(local_base, entry.name)
+    for entry in res.entries:
+        # If it's a folder, recurse
+        if isinstance(entry, dropbox.files.FolderMetadata):
+            sub_local_path = os.path.join(local_path, entry.name)  # ✅ use entry.name only
+            os.makedirs(sub_local_path, exist_ok=True)
 
-            if isinstance(entry, dropbox.files.FileMetadata):
-                if entry.name.lower().endswith(('.jpg', '.png')):
-                    if not last_run or entry.server_modified > last_run:
-                        md, res = dbx.sharing_get_shared_link_file(
-                            url=SHARED_LINK,
-                            path=entry.path_lower
-                        )
-                        with open(local_path, "wb") as f:
-                            f.write(res.content)
-                        print(f"Downloaded NEW file {entry.name} -> {local_path}")
-                        new_files = True
+            if download_shared_folder(sub_local_path, entry.path_lower, last_run):
+                has_new = True
 
-            elif isinstance(entry, dropbox.files.FolderMetadata):
-                sub_local_path = os.path.join(local_base, entry.name)
-                os.makedirs(sub_local_path, exist_ok=True)
-                
-                if download_shared_folder(sub_local_path, entry.path_lower, last_run):
-                    new_files = True
+        elif isinstance(entry, dropbox.files.FileMetadata):
+            local_file_path = os.path.join(local_path, entry.name)
 
-        if result.has_more:
-            result = dbx.files_list_folder_continue(result.cursor)
-        else:
-            break
+            # ✅ Avoid re-downloading unless updated
+            if not os.path.exists(local_file_path) or entry.client_modified.timestamp() > last_run.timestamp():
+                with open(local_file_path, "wb") as f:
+                    metadata, res = dbx.files_download(entry.path_lower)
+                    f.write(res.content)
+                print(f"Downloaded: {entry.path_lower}")
+                has_new = True
 
-    return new_files
+    return has_new
 
 
 def process_folder(base_folder, folder):
