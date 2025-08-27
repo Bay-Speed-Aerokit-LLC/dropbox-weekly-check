@@ -252,24 +252,24 @@ def main():
     local_downloads = "downloads"
     os.makedirs(local_downloads, exist_ok=True)
     
-    result = dbx.files_list_folder(
-        path="", 
-        shared_link=SharedLink(url=SHARED_LINK)
+    result = dbx.sharing_list_shared_link_files(
+        SharedLink(url=SHARED_LINK)
     )
 
     while True:
         for entry in result.entries:
             if isinstance(entry, dropbox.files.FolderMetadata):
-                local_path = os.path.join(local_downloads, entry.name)
+                local_path = os.path.join("downloads", entry.name)
                 os.makedirs(local_path, exist_ok=True)
                 print(f"Checking shared folder: {entry.name}")
-
                 has_new = download_shared_folder(local_path, entry.path_lower, last_run)
                 if has_new:
                     try:
-                        process_folder(local_downloads, entry.name)
+                        process_folder("downloads", entry.name)
                     except Exception as e:
                         print(f"Error processing {entry.name}: {e}")
+            elif isinstance(entry, dropbox.files.FileMetadata):
+                print(f"File found: {entry.name}")
 
         if result.has_more:
             result = dbx.sharing_list_shared_link_files_continue(result.cursor)
