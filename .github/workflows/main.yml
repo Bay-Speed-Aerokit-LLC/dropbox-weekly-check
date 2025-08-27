@@ -25,6 +25,9 @@ jobs:
       - name: Install dependencies
         run: pip install --upgrade dropbox rembg pillow onnxruntime
 
+      - name: Check Dropbox SDK version
+        run: python -c "import dropbox; print('Dropbox SDK version:', dropbox.__version__)"
+
       # Restore last-run file from cache
       - name: Restore last-run state
         id: cache-last-run
