@@ -14,25 +14,29 @@ from dropbox.files import SharedLink, FileMetadata, FolderMetadata
 
 # === Dropbox Setup ===
 # Move credentials to environment variables for safety.
-DBX_REFRESH_TOKEN = "61zEUq8y83MAAAAAAAAAAS_AneoAKVJxgBWB1FDGAO962YTdCkeK7Txbxye4RFOa"
-DBX_APP_KEY = "zm91y9jxmt6r8oo"
-DBX_APP_SECRET = "jcms22p6uonya8o"
-if not (DBX_REFRESH_TOKEN and DBX_APP_KEY and DBX_APP_SECRET):
-    raise RuntimeError("Set DROPBOX_OAUTH_REFRESH_TOKEN, DROPBOX_APP_KEY and DROPBOX_APP_SECRET environment variables.")
+# DBX_REFRESH_TOKEN = "61zEUq8y83MAAAAAAAAAAS_AneoAKVJxgBWB1FDGAO962YTdCkeK7Txbxye4RFOa"
+# DBX_APP_KEY = "zm91y9jxmt6r8oo"
+# DBX_APP_SECRET = "jcms22p6uonya8o"
+
+# if not (DBX_REFRESH_TOKEN and DBX_APP_KEY and DBX_APP_SECRET):
+#     raise RuntimeError("Set DROPBOX_OAUTH_REFRESH_TOKEN, DROPBOX_APP_KEY and DROPBOX_APP_SECRET environment variables.")
 
 dbx = dropbox.Dropbox(
-    oauth2_refresh_token=DBX_REFRESH_TOKEN,
-    app_key=DBX_APP_KEY,
-    app_secret=DBX_APP_SECRET,
+    oauth2_refresh_token=os.environ["DROPBOX_REFRESH_TOKEN"],
+    app_key=os.environ["DROPBOX_APP_KEY"],
+    app_secret=os.environ["DROPBOX_APP_SECRET"],
 )
 
 # === Shared Folder Link ===
 SHARED_LINK = os.environ.get("DROPBOX_SHARED_LINK") or "https://www.dropbox.com/scl/fo/x5wa53hnnfjrru13wh1j6/h?rlkey=h9r8xsjmq43vx43ofjqq0henb"
 
 # === FTP Setup ===
-FTP_HOST = "ipwstock.com"
-FTP_USER = "u307603549"
-FTP_PASS = "@BayspeedautoFTP.1234.."
+# FTP_HOST = "ipwstock.com"
+# FTP_USER = "u307603549"
+# FTP_PASS = "@BayspeedautoFTP.1234.."
+FTP_HOST = os.environ["FTP_HOST"]
+FTP_USER = os.environ["FTP_USER"]
+FTP_PASS = os.environ["FTP_PASS"]
 REMOTE_BASE_PATH = '/domains/ipwstock.com/public_html/public/dropbox/'
 
 
