@@ -26,6 +26,13 @@ dbx = dropbox.Dropbox(
     app_secret=os.environ["DROPBOX_APP_SECRET"],
 )
 
+# dbx = dropbox.Dropbox(
+#     oauth2_refresh_token=DBX_REFRESH_TOKEN,
+#     app_key=DBX_APP_KEY,
+#     app_secret=DBX_APP_SECRET,
+# )
+
+
 # === Shared Folder Link ===
 SHARED_LINK = os.environ.get("DROPBOX_SHARED_LINK") or "https://www.dropbox.com/scl/fo/x5wa53hnnfjrru13wh1j6/h?rlkey=h9r8xsjmq43vx43ofjqq0henb"
 

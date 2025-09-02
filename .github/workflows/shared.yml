@@ -16,6 +16,9 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0             # fetch full history so we can rebase/pull safely
+          persist-credentials: true  # ensure git push can authenticate with the provided token
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -61,7 +64,15 @@ jobs:
           mkdir -p reports
           mv report.txt reports/report-$(date +'%Y-%m-%d').txt
           git add reports/
-          git commit -m "Weekly Dropbox Report - $(date +'%Y-%m-%d')" || echo "No changes to commit"
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Weekly Dropbox Report - $(date +'%Y-%m-%d')"
+          # Fetch remote changes and rebase to avoid push rejection
+          git fetch origin main
+          git rebase origin/main || git pull --rebase origin main || true
+          # Push using the actions token (persist-credentials:true or explicit token)
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
 
       # Update cache with new last-run file
