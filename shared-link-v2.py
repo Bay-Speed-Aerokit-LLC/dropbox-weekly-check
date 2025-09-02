@@ -1,27 +1,38 @@
 import os
-import time
+from dotenv import load_dotenv
+load_dotenv()
+
 import io
+import time
 import ftplib
 import dropbox
-import requests
+import re
 from rembg import remove
 from PIL import Image
 from datetime import datetime
+from dropbox.files import SharedLink, FileMetadata, FolderMetadata
 
 # === Dropbox Setup ===
+# Move credentials to environment variables for safety.
+DBX_REFRESH_TOKEN = "61zEUq8y83MAAAAAAAAAAS_AneoAKVJxgBWB1FDGAO962YTdCkeK7Txbxye4RFOa"
+DBX_APP_KEY = "zm91y9jxmt6r8oo"
+DBX_APP_SECRET = "jcms22p6uonya8o"
+if not (DBX_REFRESH_TOKEN and DBX_APP_KEY and DBX_APP_SECRET):
+    raise RuntimeError("Set DROPBOX_OAUTH_REFRESH_TOKEN, DROPBOX_APP_KEY and DROPBOX_APP_SECRET environment variables.")
+
 dbx = dropbox.Dropbox(
-    oauth2_refresh_token=os.environ["DROPBOX_REFRESH_TOKEN"],
-    app_key=os.environ["DROPBOX_APP_KEY"],
-    app_secret=os.environ["DROPBOX_APP_SECRET"],
+    oauth2_refresh_token=DBX_REFRESH_TOKEN,
+    app_key=DBX_APP_KEY,
+    app_secret=DBX_APP_SECRET,
 )
 
 # === Shared Folder Link ===
-SHARED_LINK = "https://www.dropbox.com/scl/fo/x5wa53hnnfjrru13wh1j6/h?rlkey=h9r8xsjmq43vx43ofjqq0henb"
+SHARED_LINK = os.environ.get("DROPBOX_SHARED_LINK") or "https://www.dropbox.com/scl/fo/x5wa53hnnfjrru13wh1j6/h?rlkey=h9r8xsjmq43vx43ofjqq0henb"
 
 # === FTP Setup ===
-FTP_HOST = os.environ["FTP_HOST"]
-FTP_USER = os.environ["FTP_USER"]
-FTP_PASS = os.environ["FTP_PASS"]
+FTP_HOST = "ipwstock.com"
+FTP_USER = "u307603549"
+FTP_PASS = "@BayspeedautoFTP.1234.."
 REMOTE_BASE_PATH = '/domains/ipwstock.com/public_html/public/dropbox/'
 
 
@@ -39,13 +50,12 @@ def update_last_run_time():
     with open(".last_run.txt", "w") as f:
         f.write(datetime.utcnow().isoformat())
 
-
 # ----------------------------
 # Processing pipeline
 # ----------------------------
 def process_folder(base_folder, folder):
-    
     folder_path = os.path.join(base_folder, folder)
+    os.makedirs(folder_path, exist_ok=True)
 
     # === STEP 1: Resize to 6000x4000 & white background ===
     for file in os.listdir(folder_path):
@@ -53,15 +63,15 @@ def process_folder(base_folder, folder):
         if not os.path.isfile(image_path):
             continue
         try:
-            original_image = Image.open(image_path)
-        except:
+            original_image = Image.open(image_path).convert("RGBA")
+        except Exception:
             continue
 
-        target_height, target_width = 4000, 6000
+        target_width, target_height = 6000, 4000
         original_width, original_height = original_image.size
         aspect_ratio = original_width / original_height
 
-        if aspect_ratio > target_width / target_height:
+        if aspect_ratio > (target_width / target_height):
             desired_width = target_width
             desired_height = int(target_width / aspect_ratio)
         else:
@@ -77,9 +87,9 @@ def process_folder(base_folder, folder):
         background_image = Image.new('RGB', (target_width, target_height), (255, 255, 255))
         paste_left = (target_width - cropped_image.width) // 2
         paste_top = (target_height - cropped_image.height) // 2
-        background_image.paste(cropped_image, (paste_left, paste_top))
+        background_image.paste(cropped_image.convert("RGB"), (paste_left, paste_top))
         background_image.save(image_path)
-        print(f"{image_path} resized to 6000x4000 with white background.")
+        print(f"{image_path} resized to {target_width}x{target_height} with white background.")
 
     # === STEP 2: Remove background & convert to .webp ===
     for file in os.listdir(folder_path):
@@ -87,38 +97,47 @@ def process_folder(base_folder, folder):
         if not os.path.isfile(file_path):
             continue
         try:
-            img = Image.open(file_path)
-        except:
+            with open(file_path, "rb") as f:
+                data = f.read()
+            # rembg accepts bytes; it returns bytes
+            result = remove(data)
+            webp_path = os.path.splitext(file_path)[0] + '.webp'
+            Image.open(io.BytesIO(result)).save(webp_path, format="WEBP", optimize=True, quality=80)
+            print(f"{file} background removed & saved as webp.")
+        except Exception as e:
+            print(f"Skipping {file_path}: {e}")
             continue
-        remove_bg = remove(img)
-        webp_path = file_path + '.webp'
-        remove_bg.save(webp_path, format="webp", optimize=True, quality=80)
-        print(f"{file} background removed & saved as webp.")
 
     # === STEP 3: Clean up originals ===
     for file in os.listdir(folder_path):
         file_path = os.path.join(folder_path, file)
-        time.sleep(1)
-        if file.endswith('.webp'):
-            filename, extension = os.path.splitext(file_path)
-            new_file_path = filename.split(".")[0] + extension
-            os.rename(file_path, new_file_path)
-        elif file.lower().endswith(('.jpg', '.png')):
-            os.remove(file_path)
-            print(f"{file} removed.")
+        time.sleep(0.2)
+        if file.lower().endswith('.webp'):
+            # ensure names don't double up: if we created file.webp from file.jpg, delete the original jpg/png
+            continue
+        elif file.lower().endswith(('.jpg', '.png', '.jpeg')):
+            try:
+                os.remove(file_path)
+                print(f"{file} removed.")
+            except Exception as e:
+                print(f"Failed to remove {file_path}: {e}")
 
     # === STEP 4: Create PNG folder & save 500x500 PNG ===
     png_folder = os.path.join(folder_path, "PNG")
-    if not os.path.exists(png_folder):
-        os.mkdir(png_folder)
+    os.makedirs(png_folder, exist_ok=True)
     for file in os.listdir(folder_path):
-        if file not in ("PNG", "images") and file.lower().endswith('.webp'):
+        if file in ("PNG", "images"):
+            continue
+        if file.lower().endswith('.webp'):
             image_path = os.path.join(folder_path, file)
-            img = Image.open(image_path)
-            target_height, target_width = 500, 500
+            try:
+                img = Image.open(image_path).convert("RGBA")
+            except Exception:
+                continue
+            target_width, target_height = 500, 500
             original_width, original_height = img.size
             aspect_ratio = original_width / original_height
-            if aspect_ratio > target_width / target_height:
+            if aspect_ratio > (target_width / target_height):
                 desired_width = target_width
                 desired_height = int(target_width / aspect_ratio)
             else:
@@ -131,86 +150,101 @@ def process_folder(base_folder, folder):
             crop_bottom = crop_top + target_height
             cropped_image = resized_image.crop((crop_left, crop_top, crop_right, crop_bottom))
             background_image = Image.new('RGB', (target_width, target_height), (255, 255, 255))
-            paste_left = (target_width - cropped_image.width) // 2
-            paste_top = (target_height - cropped_image.height) // 2
-            background_image.paste(cropped_image, (paste_left, paste_top))
-            png_path = os.path.join(png_folder, folder + '.png')
-            background_image.save(png_path, format="png", optimize=True, quality=10)
-            print(f"{image_path} saved as 500x500 PNG.")
+            background_image.paste(cropped_image.convert("RGB"), ((target_width - cropped_image.width) // 2, (target_height - cropped_image.height) // 2))
+            png_path = os.path.join(png_folder, f"{folder}.png")
+            background_image.save(png_path, format="PNG", optimize=True)
+            print(f"{image_path} saved as 500x500 PNG -> {png_path}.")
 
     # === STEP 5: Create images folder & save 400x270 images ===
     images_folder = os.path.join(folder_path, "images")
-    if not os.path.exists(images_folder):
-        os.mkdir(images_folder)
+    os.makedirs(images_folder, exist_ok=True)
     for file in os.listdir(folder_path):
-        if file not in ("PNG", "images") and file.lower().endswith('.webp'):
+        if file in ("PNG", "images"):
+            continue
+        if file.lower().endswith('.webp'):
             image_path = os.path.join(folder_path, file)
-            img = Image.open(image_path)
-            resized_image = img.resize((400, 270), Image.LANCZOS)
+            try:
+                img = Image.open(image_path).convert("RGBA")
+            except Exception:
+                continue
+            resized_image = img.resize((400, 270), Image.LANCZOS).convert("RGB")
             save_path = os.path.join(images_folder, file)
             resized_image.save(save_path)
-            print(f"{image_path} resized to 400x270 in images folder.")
+            print(f"{image_path} resized to 400x270 in images folder -> {save_path}.")
 
     # === STEP 6: Remove background again in /images & set white background ===
     for file in os.listdir(images_folder):
-        if file.endswith('.webp'):
+        if file.lower().endswith(('.webp', '.jpg', '.png', '.jpeg')):
             input_image_path = os.path.join(images_folder, file)
-            with open(input_image_path, "rb") as f:
-                image_data = f.read()
-            result = remove(image_data)
-            image = Image.open(io.BytesIO(result)).convert("RGBA")
-            background = Image.new('RGBA', image.size, (255, 255, 255, 255))
-            background.paste(image, (0, 0), image)
-            background.save(input_image_path, format="WEBP")
-            print(f"{input_image_path} white background reapplied.")
+            try:
+                with open(input_image_path, "rb") as f:
+                    image_data = f.read()
+                result = remove(image_data)
+                image = Image.open(io.BytesIO(result)).convert("RGBA")
+                background = Image.new('RGBA', image.size, (255, 255, 255, 255))
+                background.paste(image, (0, 0), image)
+                # save as WEBP to preserve smaller size
+                background.convert("RGB").save(input_image_path, format="WEBP")
+                print(f"{input_image_path} white background reapplied.")
+            except Exception as e:
+                print(f"Failed reapply background on {input_image_path}: {e}")
 
     # === STEP 7: Store Image to hostinger account ===
     ftp = ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS)
-    ftp.cwd(REMOTE_BASE_PATH)
+    try:
+        ftp.cwd(REMOTE_BASE_PATH)
+    except Exception:
+        # try to create base path
+        try:
+            ftp.mkd(REMOTE_BASE_PATH)
+            ftp.cwd(REMOTE_BASE_PATH)
+        except Exception as e:
+            ftp.quit()
+            raise
 
-    remote_folder_path = os.path.join(REMOTE_BASE_PATH, folder)
+    remote_folder_path = os.path.join(REMOTE_BASE_PATH, folder).replace("\\", "/")
     remote_folders = ftp.nlst()
     if folder not in remote_folders:
-        ftp.mkd(remote_folder_path)
-        print(f"'{folder}' created on the remote server.")
+        try:
+            ftp.mkd(remote_folder_path)
+            print(f"'{folder}' created on the remote server.")
+        except Exception:
+            pass
 
     def upload_folder(local_path, remote_path):
         try:
             ftp.mkd(remote_path)
-            print(f"Created remote directory: {remote_path}")
         except ftplib.error_perm as e:
+            # 550 means folder exists on many servers
             if not str(e).startswith("550"):
-                raise
+                print(f"FTP mkdir error: {e}")
         for filename in os.listdir(local_path):
             local_file = os.path.join(local_path, filename)
             remote_file = f"{remote_path}/{filename}"
             if os.path.isfile(local_file):
+                # remove remote file if it exists, ignore permission errors
                 try:
-                    ftp.size(remote_file)
-                    print(f"'{remote_file}' already exists on the remote server.")
-                except ftplib.error_perm as e:
-                    if "550" in str(e):
-                        with open(local_file, 'rb') as f:
-                            ftp.storbinary(f"STOR {remote_file}", f)
-                        print(f"Uploaded: {remote_file}")
-                    else:
-                        print(f"Error checking '{remote_file}': {str(e)}")
+                    ftp.delete(remote_file)
+                    print(f"Removed remote {remote_file} (will replace).")
+                except ftplib.error_perm:
+                    pass
+                with open(local_file, 'rb') as f:
+                    ftp.storbinary(f"STOR {remote_file}", f)
+                print(f"Uploaded/Updated: {remote_file}")
 
-    # Upload main .webp
-    main_webp_list = [x for x in os.listdir(folder_path) if x.endswith('.webp')]
+    # Upload main .webp (always replace on remote)
+    main_webp_list = [x for x in os.listdir(folder_path) if x.lower().endswith('.webp')]
     for webp_image in main_webp_list:
         local_image_path = os.path.join(folder_path, webp_image)
         server_path = f"{remote_folder_path}/{webp_image}"
         try:
-            ftp.size(server_path)
-            print(f"'{server_path}' already exists on the remote server.")
-        except ftplib.error_perm as e:
-            if "550" in str(e):
-                with open(local_image_path, 'rb') as f:
-                    ftp.storbinary(f"STOR {server_path}", f)
-                print(f"'{server_path}' transferred to the remote server.")
-            else:
-                print(f"Error checking '{webp_image}': {str(e)}")
+            ftp.delete(server_path)
+            print(f"Removed old remote {server_path}.")
+        except ftplib.error_perm:
+            pass
+        with open(local_image_path, 'rb') as f:
+            ftp.storbinary(f"STOR {server_path}", f)
+        print(f"'{server_path}' transferred to the remote server.")
 
     if os.path.exists(images_folder):
         upload_folder(images_folder, f"{remote_folder_path}/images")
@@ -223,14 +257,13 @@ def process_folder(base_folder, folder):
 # ----------------------------
 # Main
 # ----------------------------
-
 def main():
     last_run = get_last_run_time()
     local_downloads = "downloads"
     os.makedirs(local_downloads, exist_ok=True)
 
     # Create SharedLink object
-    link = dropbox.files.SharedLink(url=SHARED_LINK)
+    link = SharedLink(url=SHARED_LINK)
 
     # List root contents of the shared link
     result = dbx.files_list_folder(path="", shared_link=link)
@@ -242,47 +275,82 @@ def main():
     # Only top-level folders with "-" in the name
     target_folders = [
         e for e in entries
-        if isinstance(e, dropbox.files.FolderMetadata) and "-" in e.name
+        if (
+            isinstance(e, dropbox.files.FolderMetadata)
+            and "-" in e.name
+            and "disc" not in e.name.lower()           # exclude "Discontinue" variants
+            and "undone" not in e.name.lower()         # exclude "Undone" variants
+            and "single drill" not in e.name.lower()   # exclude "Single Drill" variants
+            and "828-1" not in e.name.lower()          # exclude "828-1" variants
+            and not any("  " in part for part in e.name.split("-"))  # exclude extra spaces between segments
+        )
     ]
 
-    print("📂 Found target folders:", [f.name for f in target_folders])
-
-    # Download + process each folder (top-level only)
     for folder in target_folders:
-        folder_name = folder.name
-        folder_path = os.path.join(local_downloads, folder_name)
-        os.makedirs(folder_path, exist_ok=True)
+        print(f"Processing folder: {folder.name}")
+        # SharedLink object just needs the URL
+        link = SharedLink(url=SHARED_LINK)
 
-        # List files only in this folder (no subfolders)
-        folder_result = dbx.files_list_folder(path="", shared_link=dropbox.files.SharedLink(url=SHARED_LINK, path=folder_name))
+        # The path inside the shared link is "/" + folder name
+        folder_result = dbx.files_list_folder(
+            path="/" + folder.name,
+            shared_link=link
+        )
+
         folder_entries = folder_result.entries
         while folder_result.has_more:
             folder_result = dbx.files_list_folder_continue(folder_result.cursor)
             folder_entries.extend(folder_result.entries)
 
-        # Download files
-        for entry in folder_entries:
-            if isinstance(entry, dropbox.files.FileMetadata):
-                # Only process jpg/png
-                if not entry.name.lower().endswith((".jpg", ".png")):
-                    continue
+        # Only .jpg and .png files that end with a numeric suffix like "-04", "_05", etc.
+        numeric_suffix_re = re.compile(r".*[-_]\d+$")
+        files_to_download = [
+            f for f in folder_entries
+            if (
+                isinstance(f, dropbox.files.FileMetadata)
+                and f.name.lower().endswith((".jpg", ".png", ".jpeg"))
+                and numeric_suffix_re.match(os.path.splitext(f.name)[0].lower())
+            )
+        ]
 
-                # Check last modification time
-                modified_time = entry.server_modified
-                if last_run and modified_time <= last_run:
-                    continue  # Skip older files
+        # prepare local folder
+        local_folder_path = os.path.join(local_downloads, folder.name)
+        os.makedirs(local_folder_path, exist_ok=True)
 
-                md, res = dbx.files_download(entry.path_lower)
-                local_file_path = os.path.join(folder_path, entry.name)
-                with open(local_file_path, "wb") as f:
-                    f.write(res.content)
-                print(f"⬇ Downloaded {entry.name} → {local_file_path}")
+        # download files into local folder
+        now = datetime.utcnow()
+        MIN_FILES = int(os.environ.get("MIN_FILES_TO_PROCESS", "3"))  # set to 5 via env if you prefer
 
-        # Process the folder
-        try:
-            process_folder(local_downloads, folder_name)
-        except Exception as e:
-            print(f"❌ Error processing {folder_name}: {e}")
+        # filter files by timestamp (only current month)
+        eligible_files = []
+        for f in files_to_download:
+            file_ts = getattr(f, "server_modified", None) or getattr(f, "client_modified", None)
+            if file_ts is None:
+                print(f"Skipping {f.name}: no timestamp available on metadata.")
+                continue
+            if file_ts.year == now.year and file_ts.month == now.month:
+                eligible_files.append(f)
+
+        if not eligible_files:
+            print(f"Skipping folder {folder.name}: no images from current month ({now.strftime('%Y-%m')}).")
+            continue
+        if len(eligible_files) < MIN_FILES:
+            print(f"Skipping folder {folder.name}: only {len(eligible_files)} file(s) from current month (min {MIN_FILES}).")
+            continue
+
+        for f in eligible_files:
+            local_path = os.path.join(local_folder_path, f.name)
+            dropbox_path = "/" + folder.name + "/" + f.name
+            try:
+                md, res = dbx.sharing_get_shared_link_file(url=SHARED_LINK, path=dropbox_path)
+                with open(local_path, "wb") as out_f:
+                    out_f.write(res.content)
+                print(f"Downloaded {dropbox_path} -> {local_path}")
+            except Exception as e:
+                print(f"Failed to download {dropbox_path}: {e}")
+
+        # process the downloaded folder once
+        process_folder(local_downloads, folder.name)
 
     update_last_run_time()
 
