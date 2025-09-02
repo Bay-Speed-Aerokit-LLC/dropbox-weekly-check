@@ -69,11 +69,15 @@ jobs:
             exit 0
           fi
           git commit -m "Weekly Dropbox Report - $(date +'%Y-%m-%d')"
-          # Fetch remote changes and rebase to avoid push rejection
-          git fetch origin main
-          git rebase origin/main || git pull --rebase origin main || true
-          # Push using the actions token (persist-credentials:true or explicit token)
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
+          # Ensure we have full history and latest remote refs
+          git fetch --no-tags --prune origin main
+          # Rebase local commit(s) on top of remote main; fail on conflict
+          if ! git pull --rebase --autostash origin main; then
+            echo "Rebase failed. Aborting to avoid push rejection."
+            exit 1
+          fi
+          # Push the rebased commit
+          git push origin HEAD:main
 
       # Update cache with new last-run file
       - name: Save last-run state
