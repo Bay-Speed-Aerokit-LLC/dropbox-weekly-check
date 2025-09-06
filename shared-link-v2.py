@@ -67,21 +67,22 @@ def process_folder(base_folder, folder):
     folder_path = os.path.join(base_folder, folder)
     os.makedirs(folder_path, exist_ok=True)
 
-    # === STEP 1: Resize to 6000x4000 & white background ===
-    for file in os.listdir(folder_path):
+     # === STEP 1: Resize to 6000x4000 & white background ===
+    file_list = os.listdir(folder_path)
+    for file in file_list:
         image_path = os.path.join(folder_path, file)
         if not os.path.isfile(image_path):
             continue
         try:
-            original_image = Image.open(image_path).convert("RGBA")
-        except Exception:
+            original_image = Image.open(image_path)
+        except:
             continue
 
-        target_width, target_height = 6000, 4000
+        target_height, target_width = 4000, 6000
         original_width, original_height = original_image.size
         aspect_ratio = original_width / original_height
 
-        if aspect_ratio > (target_width / target_height):
+        if aspect_ratio > target_width / target_height:
             desired_width = target_width
             desired_height = int(target_width / aspect_ratio)
         else:
@@ -89,65 +90,61 @@ def process_folder(base_folder, folder):
             desired_width = int(target_height * aspect_ratio)
 
         resized_image = original_image.resize((desired_width, desired_height), Image.LANCZOS)
+
         crop_left = (desired_width - target_width) // 2
         crop_top = (desired_height - target_height) // 2
         crop_right = crop_left + target_width
         crop_bottom = crop_top + target_height
+
         cropped_image = resized_image.crop((crop_left, crop_top, crop_right, crop_bottom))
+
         background_image = Image.new('RGB', (target_width, target_height), (255, 255, 255))
         paste_left = (target_width - cropped_image.width) // 2
         paste_top = (target_height - cropped_image.height) // 2
-        background_image.paste(cropped_image.convert("RGB"), (paste_left, paste_top))
+        background_image.paste(cropped_image, (paste_left, paste_top))
         background_image.save(image_path)
-        print(f"{image_path} resized to {target_width}x{target_height} with white background.")
+        print(f"{image_path} resized to 6000x4000 with white background.")
 
     # === STEP 2: Remove background & convert to .webp ===
-    for file in os.listdir(folder_path):
-        file_path = os.path.join(folder_path, file)
+    image_list = os.listdir(folder_path)
+    for image_file in image_list:
+        file_path = os.path.join(folder_path, image_file)
         if not os.path.isfile(file_path):
             continue
         try:
-            with open(file_path, "rb") as f:
-                data = f.read()
-            # rembg accepts bytes; it returns bytes
-            result = remove(data)
-            webp_path = os.path.splitext(file_path)[0] + '.webp'
-            Image.open(io.BytesIO(result)).save(webp_path, format="WEBP", optimize=True, quality=80)
-            print(f"{file} background removed & saved as webp.")
-        except Exception as e:
-            print(f"Skipping {file_path}: {e}")
+            img = Image.open(file_path)
+        except:
             continue
+        remove_bg = remove(img)
+        webp_path = file_path + '.webp'
+        remove_bg.save(webp_path, format="webp", optimize=True, quality=10)
+        print(f"{image_file} background removed & saved as webp.")
 
-    # === STEP 3: Clean up originals ===
-    for file in os.listdir(folder_path):
-        file_path = os.path.join(folder_path, file)
-        time.sleep(0.2)
-        if file.lower().endswith('.webp'):
-            # ensure names don't double up: if we created file.webp from file.jpg, delete the original jpg/png
-            continue
-        elif file.lower().endswith(('.jpg', '.png', '.jpeg')):
-            try:
-                os.remove(file_path)
-                print(f"{file} removed.")
-            except Exception as e:
-                print(f"Failed to remove {file_path}: {e}")
+    # === STEP 3: Clean up original images ===
+    rm_image_list = os.listdir(folder_path)
+    for rm_image in rm_image_list:
+        rm_file_path = os.path.join(folder_path, rm_image)
+        time.sleep(1)
+        if rm_image.endswith('.webp'):
+            filename, extension = os.path.splitext(rm_file_path)
+            new_file_path = filename.split(".")[0] + extension
+            os.rename(rm_file_path, new_file_path)
+        elif rm_image.lower().endswith(('.jpg', '.png')):
+            os.remove(rm_file_path)
+            print(f"{rm_image} removed.")
 
     # === STEP 4: Create PNG folder & save 500x500 PNG ===
     png_folder = os.path.join(folder_path, "PNG")
-    os.makedirs(png_folder, exist_ok=True)
+    if not os.path.exists(png_folder):
+        os.mkdir(png_folder)
     for file in os.listdir(folder_path):
-        if file in ("PNG", "images"):
-            continue
-        if file.lower().endswith('.webp'):
+        if file not in ("PNG", "images") and file.lower().endswith('.webp'):
             image_path = os.path.join(folder_path, file)
-            try:
-                img = Image.open(image_path).convert("RGBA")
-            except Exception:
-                continue
-            target_width, target_height = 500, 500
+            img = Image.open(image_path)
+            target_height, target_width = 500, 500
             original_width, original_height = img.size
             aspect_ratio = original_width / original_height
-            if aspect_ratio > (target_width / target_height):
+            if aspect_ratio > target_width / target_height:
                 desired_width = target_width
                 desired_height = int(target_width / aspect_ratio)
             else:
@@ -160,44 +157,38 @@ def process_folder(base_folder, folder):
             crop_bottom = crop_top + target_height
             cropped_image = resized_image.crop((crop_left, crop_top, crop_right, crop_bottom))
             background_image = Image.new('RGB', (target_width, target_height), (255, 255, 255))
-            background_image.paste(cropped_image.convert("RGB"), ((target_width - cropped_image.width) // 2, (target_height - cropped_image.height) // 2))
-            png_path = os.path.join(png_folder, f"{folder}.png")
-            background_image.save(png_path, format="PNG", optimize=True)
-            print(f"{image_path} saved as 500x500 PNG -> {png_path}.")
+            paste_left = (target_width - cropped_image.width) // 2
+            paste_top = (target_height - cropped_image.height) // 2
+            background_image.paste(cropped_image, (paste_left, paste_top))
+            png_path = os.path.join(png_folder, folder + '.png')
+            background_image.save(png_path, format="png", optimize=True, quality=10)
+            print(f"{image_path} saved as 500x500 PNG.")
 
     # === STEP 5: Create images folder & save 400x270 images ===
     images_folder = os.path.join(folder_path, "images")
-    os.makedirs(images_folder, exist_ok=True)
+    if not os.path.exists(images_folder):
+        os.mkdir(images_folder)
     for file in os.listdir(folder_path):
-        if file in ("PNG", "images"):
-            continue
-        if file.lower().endswith('.webp'):
+        if file not in ("PNG", "images") and file.lower().endswith('.webp'):
             image_path = os.path.join(folder_path, file)
-            try:
-                img = Image.open(image_path).convert("RGBA")
-            except Exception:
-                continue
-            resized_image = img.resize((400, 270), Image.LANCZOS).convert("RGB")
+            img = Image.open(image_path)
+            resized_image = img.resize((400, 270), Image.LANCZOS)
             save_path = os.path.join(images_folder, file)
             resized_image.save(save_path)
-            print(f"{image_path} resized to 400x270 in images folder -> {save_path}.")
+            print(f"{image_path} resized to 400x270 in images folder.")
 
     # === STEP 6: Remove background again in /images & set white background ===
-    for file in os.listdir(images_folder):
-        if file.lower().endswith(('.webp', '.jpg', '.png', '.jpeg')):
-            input_image_path = os.path.join(images_folder, file)
-            try:
-                with open(input_image_path, "rb") as f:
-                    image_data = f.read()
-                result = remove(image_data)
-                image = Image.open(io.BytesIO(result)).convert("RGBA")
-                background = Image.new('RGBA', image.size, (255, 255, 255, 255))
-                background.paste(image, (0, 0), image)
-                # save as WEBP to preserve smaller size
-                background.convert("RGB").save(input_image_path, format="WEBP")
-                print(f"{input_image_path} white background reapplied.")
-            except Exception as e:
-                print(f"Failed reapply background on {input_image_path}: {e}")
+    for image_file in os.listdir(images_folder):
+        if image_file.endswith('.webp'):
+            input_image_path = os.path.join(images_folder, image_file)
+            with open(input_image_path, "rb") as f:
+                image_data = f.read()
+            result = remove(image_data)
+            image = Image.open(io.BytesIO(result)).convert("RGBA")
+            background = Image.new('RGBA', image.size, (255, 255, 255, 255))
+            background.paste(image, (0, 0), image)
+            background.save(input_image_path, format="WEBP")
+            print(f"{input_image_path} white background reapplied.")
 
     # === STEP 7: Store Image to hostinger account ===
     ftp = ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS)
