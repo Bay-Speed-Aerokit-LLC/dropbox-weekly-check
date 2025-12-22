@@ -499,7 +499,7 @@ def main():
         if len(eligible_files) < MIN_FILES:
             print(f"Skipping folder {folder.name}: only {len(eligible_files)} file(s) from current month (min {MIN_FILES}).")
             continue
-
+        # test dugoyd
         for f in eligible_files:
             local_path = os.path.join(local_folder_path, f.name)
             dropbox_path = "/" + folder.name + "/" + f.name
