@@ -6,10 +6,35 @@ import time
 import ftplib
 import dropbox
 import re
-from rembg import remove
+from rembg import remove, new_session
 from PIL import Image
 from datetime import datetime
 from dropbox.files import SharedLink, FileMetadata, FolderMetadata
+
+# === New Configuration / Helpers ===
+# Global set to track which folders have already had their single PNG file created
+PNG_CREATED_FOLDERS = set()
+
+def create_square_image(img, size, fill_color=(0, 0, 0, 0)):
+    """
+    Resizes an image to fit within a square boundary (maintaining aspect ratio) 
+    and pads the remaining space with a transparent color.
+    """
+    # 1. Resize to fit within the square boundary (e.g., 2000x2000) while maintaining aspect ratio
+    img.thumbnail(size, Image.Resampling.LANCZOS)
+    
+    # 2. Create the final square canvas with transparent background
+    new_img = Image.new('RGBA', size, fill_color)
+    
+    # 3. Calculate position to center the resized image on the canvas
+    width, height = img.size
+    x_offset = (size[0] - width) // 2
+    y_offset = (size[1] - height) // 2
+    
+    # 4. Paste the resized image onto the canvas (using itself as the mask)
+    new_img.paste(img, (x_offset, y_offset), img)
+    
+    return new_img
 
 # === Dropbox Setup ===
 # Move credentials to environment variables for safety.
@@ -67,6 +92,123 @@ def process_folder(base_folder, folder):
     folder_path = os.path.join(base_folder, folder)
     os.makedirs(folder_path, exist_ok=True)
 
+    # =========================================================================
+    # REPLACED OLD LOGIC WITH NEW PROCESSING LOGIC (Start)
+    # Reason: Creating non-distorted padded images and outputting PNGs instead of WebP.
+    # =========================================================================
+
+    # Initialize rembg session
+    try:
+        session = new_session('isnet-general-use')
+    except Exception as e:
+        print(f"Error initializing rembg session: {e}")
+        return
+
+    RESIZE_DIMENSION = (400, 270)
+    PNG_DIMENSION = (500, 500)
+    PRE_RESIZE_DIMENSION = (6000, 4000)
+
+    # Process files
+    file_list = os.listdir(folder_path)
+    images_dir = os.path.join(folder_path, "images")
+    png_folder = os.path.join(folder_path, "PNG") # Keep variable name compatible with old code
+
+    os.makedirs(images_dir, exist_ok=True)
+    os.makedirs(png_folder, exist_ok=True)
+
+    for file in file_list:
+        input_path = os.path.join(folder_path, file)
+        if not os.path.isfile(input_path):
+            continue
+        
+        # Only process images
+        if not file.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
+             continue
+        
+        # Skip already processed (if any, though we usually clean up)
+        if file_path.lower().endswith('.png') and file not in os.listdir(original_dir): 
+             # logic to avoid re-processing outputs if they are in root
+             pass
+
+        print(f"Processing: {input_path}")
+        
+        try:
+            with open(input_path, 'rb') as i:
+                input_data = i.read()
+        except Exception as e:
+            print(f"Error reading {input_path}: {e}")
+            continue
+
+        # --- Non-Distorted Pre-resize ---
+        try:
+            pre_process_img = Image.open(io.BytesIO(input_data)).convert("RGBA")
+            width, height = pre_process_img.size
+            
+            if width > PRE_RESIZE_DIMENSION[0] or height > PRE_RESIZE_DIMENSION[1]:
+                print(f"Resizing image to {PRE_RESIZE_DIMENSION} (padded) for stability.")
+                pre_process_img = create_square_image(pre_process_img, PRE_RESIZE_DIMENSION, fill_color=(255, 255, 255, 255))
+            
+            buffer = io.BytesIO()
+            pre_process_img.save(buffer, format="PNG")
+            input_data = buffer.getvalue()
+        except Exception as e:
+             print(f"Error in pre-resize: {e}")
+             continue
+
+        # --- Background Removal ---
+        try:
+            output_data = remove(input_data, session=session)
+            processed_img = Image.open(io.BytesIO(output_data)).convert("RGBA")
+        except Exception as e:
+            print(f"Error removing background: {e}")
+            continue
+
+        base_name = os.path.splitext(file)[0]
+
+        # --- 1. Save Full-Size PNG (Root) ---
+        root_output_path = os.path.join(folder_path, f"{base_name}.png")
+        try:
+            processed_img.save(root_output_path, "PNG")
+            print(f"Saved full-size .png to root.")
+        except Exception as e:
+            print(f"Error saving root PNG: {e}")
+
+        # --- 2. Save 'images' Folder (Resized 400x270 Padded PNG) ---
+        final_images_img = create_square_image(processed_img, RESIZE_DIMENSION, fill_color=(0, 0, 0, 0))
+        images_output_path = os.path.join(images_dir, f"{base_name}.png")
+        try:
+            final_images_img.save(images_output_path, "PNG")
+            print(f"Saved resized .png to images/.")
+        except Exception as e:
+             print(f"Error saving images/ PNG: {e}")
+
+        # --- 3. Save 'PNG' Folder (500x500 PNG, ONLY ONE FILE) ---
+        if folder_path not in PNG_CREATED_FOLDERS:
+            final_png_img = create_square_image(processed_img, PNG_DIMENSION, fill_color=(0, 0, 0, 0))
+            png_output_path = os.path.join(png_folder, f"{base_name}.png")
+            try:
+                final_png_img.save(png_output_path, "PNG")
+                PNG_CREATED_FOLDERS.add(folder_path)
+                print(f"Saved 500x500 PNG to PNG/ (First image only).")
+            except Exception as e:
+                print(f"Error saving PNG/ file: {e}")
+        
+    # --- Cleanup Originals ---
+    print("Cleaning up original files...")
+    for f in os.listdir(folder_path):
+        f_path = os.path.join(folder_path, f)
+        if os.path.isfile(f_path) and f.lower().endswith(('.jpg', '.jpeg')):
+            try:
+                os.remove(f_path)
+                print(f"Deleted original: {f}")
+            except Exception as e:
+                print(f"Error deleting {f}: {e}")
+
+    '''
+    # =========================================================================
+    # OLD STEPS 1-6 COMMENTED OUT BELOW
+    # =========================================================================
+    
      # === STEP 1: Resize to 6000x4000 & white background ===
     file_list = os.listdir(folder_path)
     for file in file_list:
@@ -189,6 +331,7 @@ def process_folder(base_folder, folder):
             background.paste(image, (0, 0), image)
             background.save(input_image_path, format="WEBP")
             print(f"{input_image_path} white background reapplied.")
+    '''
 
     # === STEP 7: Store Image to hostinger account ===
     ftp = ftplib.FTP(FTP_HOST, FTP_USER, FTP_PASS)
@@ -233,6 +376,23 @@ def process_folder(base_folder, folder):
                     ftp.storbinary(f"STOR {remote_file}", f)
                 print(f"Uploaded/Updated: {remote_file}")
 
+    # Upload main .png (always replace on remote)
+    # UPDATED: Changed from .webp to .png
+    main_png_list = [x for x in os.listdir(folder_path) if x.lower().endswith('.png')]
+    for png_image in main_png_list:
+        local_image_path = os.path.join(folder_path, png_image)
+        server_path = f"{remote_folder_path}/{png_image}"
+        try:
+            ftp.delete(server_path)
+            print(f"Removed old remote {server_path}.")
+        except ftplib.error_perm:
+            pass
+        with open(local_image_path, 'rb') as f:
+            ftp.storbinary(f"STOR {server_path}", f)
+        print(f"'{server_path}' transferred to the remote server.")
+
+    '''
+    # OLD WEBP UPLOAD COMMENTED OUT
     # Upload main .webp (always replace on remote)
     main_webp_list = [x for x in os.listdir(folder_path) if x.lower().endswith('.webp')]
     for webp_image in main_webp_list:
@@ -246,6 +406,7 @@ def process_folder(base_folder, folder):
         with open(local_image_path, 'rb') as f:
             ftp.storbinary(f"STOR {server_path}", f)
         print(f"'{server_path}' transferred to the remote server.")
+    '''
 
     if os.path.exists(images_folder):
         upload_folder(images_folder, f"{remote_folder_path}/images")
